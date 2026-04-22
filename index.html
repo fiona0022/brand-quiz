@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>品牌题库练习</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+    background: #0f0f1a;
+    color: #e8e8f0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+  }
+
+  .container { width: 100%; max-width: 680px; }
+
+  .status-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px; font-size: 14px; color: #8888aa;
+  }
+
+  .progress-bar-wrap {
+    width: 200px; height: 6px; background: #2a2a3a;
+    border-radius: 3px; overflow: hidden; margin: 0 12px; flex: 1;
+  }
+
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #6c63ff, #ff63c8);
+    border-radius: 3px; transition: width 0.4s ease; width: 0%;
+  }
+
+  .correct-badge {
+    background: #1a4a2e; color: #4cff91; border-radius: 4px;
+    padding: 2px 8px; font-size: 13px; min-width: 60px; text-align: center;
+  }
+
+  .mode-tabs { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+
+  .mode-tab {
+    padding: 8px 16px; border-radius: 8px; border: 1px solid #333355;
+    background: #1a1a2e; color: #8888bb; cursor: pointer;
+    font-size: 13px; transition: all 0.2s;
+  }
+
+  .mode-tab.active { background: #2a2a5e; color: #a0a0ff; border-color: #6c63ff; }
+  .mode-tab:hover:not(.active) { border-color: #555577; color: #aaaacc; }
+
+  .card {
+    background: #1a1a2e; border-radius: 16px; border: 1px solid #2a2a45;
+    padding: 28px 24px; margin-bottom: 20px; text-align: center;
+    transition: border-color 0.3s;
+  }
+
+  .flash { animation: cardFlash 0.5s ease forwards; }
+
+  @keyframes cardFlash {
+    0%   { border-color: #00e676; box-shadow: 0 0 20px rgba(0,230,118,0.3); }
+    60%  { border-color: #00e676; box-shadow: 0 0 30px rgba(0,230,118,0.2); }
+    100% { border-color: #2a2a45; box-shadow: none; }
+  }
+
+  .card.skip-flash { animation: skipFlash 0.5s ease forwards; }
+
+  @keyframes skipFlash {
+    0%   { border-color: #8888bb; box-shadow: 0 0 10px rgba(136,136,187,0.2); }
+    60%  { border-color: #666688; box-shadow: 0 0 15px rgba(136,136,187,0.15); }
+    100% { border-color: #2a2a45; box-shadow: none; }
+  }
+
+  .question-label {
+    font-size: 12px; color: #6c63ff; text-transform: uppercase;
+    letter-spacing: 2px; margin-bottom: 16px;
+  }
+
+  .brand-name { font-size: 28px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .brand-cn { font-size: 16px; color: #8888bb; margin-bottom: 20px; min-height: 24px; }
+  .answer-hint { font-size: 18px; color: #ccccff; margin-bottom: 24px; }
+
+  .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .options-grid.cols-1 { grid-template-columns: 1fr; max-width: 400px; margin: 0 auto; }
+
+  .option-btn {
+    padding: 12px 16px; border-radius: 10px; border: 1px solid #333355;
+    background: #22223a; color: #d0d0ee; cursor: pointer;
+    font-size: 14px; text-align: center; transition: all 0.18s; line-height: 1.4;
+  }
+
+  .option-btn:hover:not(.disabled) {
+    border-color: #6c63ff; background: #2a2a55; color: #fff;
+  }
+
+  .option-btn.disabled { cursor: default; opacity: 0.55; }
+
+  .option-btn.correct {
+    border-color: #00e676 !important; background: #0d3a1f !important;
+    color: #4cff91 !important; opacity: 1 !important;
+  }
+
+  .option-btn.wrong {
+    border-color: #ff5252 !important; background: #3a0d0d !important;
+    color: #ff8080 !important; opacity: 1 !important;
+    animation: shake 0.4s ease;
+  }
+
+  .option-btn.show-correct {
+    border-color: #00e676 !important; background: #0d3a1f !important;
+    color: #4cff91 !important; opacity: 1 !important;
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); }
+    60% { transform: translateX(6px); }
+  }
+
+  .feedback { margin-top: 16px; font-size: 14px; min-height: 20px; text-align: center; }
+
+  .skip-btn {
+    display: block; margin: 0 auto 24px; background: none;
+    border: 1px solid #333355; color: #555577; padding: 8px 24px;
+    border-radius: 8px; cursor: pointer; font-size: 13px; transition: all 0.2s;
+  }
+
+  .skip-btn:hover { border-color: #555577; color: #8888aa; }
+
+  .result-card {
+    background: #1a1a2e; border-radius: 16px; border: 1px solid #2a2a45;
+    padding: 40px 24px; text-align: center; margin-bottom: 24px;
+  }
+
+  .result-icon { font-size: 64px; margin-bottom: 16px; }
+  .result-title { font-size: 24px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+  .result-sub { font-size: 15px; color: #8888bb; margin-bottom: 24px; }
+
+  .result-stats { display: flex; gap: 16px; justify-content: center; margin-bottom: 28px; }
+
+  .stat-box {
+    background: #22223a; border-radius: 12px; padding: 16px 24px;
+    text-align: center; min-width: 100px;
+  }
+
+  .stat-num { font-size: 28px; font-weight: 700; color: #a0a0ff; }
+  .stat-label { font-size: 12px; color: #666688; margin-top: 4px; }
+  .stat-box.green .stat-num { color: #4cff91; }
+  .stat-box.red .stat-num { color: #ff6b6b; }
+
+  .restart-btn {
+    background: #6c63ff; color: #fff; border: none;
+    padding: 14px 40px; border-radius: 10px; font-size: 16px;
+    cursor: pointer; font-weight: 600; transition: background 0.2s;
+  }
+
+  .restart-btn:hover { background: #5a52e0; }
+
+  .type-legend { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 16px; }
+
+  .type-pill {
+    font-size: 11px; padding: 3px 10px; border-radius: 20px;
+    background: #22223a; border: 1px solid #333355; color: #8888bb;
+  }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 20px; }
+
+  .summary-item {
+    background: #1a1a2e; border: 1px solid #2a2a45; border-radius: 10px;
+    padding: 12px 8px; text-align: center;
+  }
+
+  .summary-n { font-size: 20px; font-weight: 700; color: #a0a0ff; }
+  .summary-l { font-size: 10px; color: #555577; margin-top: 2px; }
+  .summary-item.good .summary-n { color: #4cff91; }
+  .summary-item.bad .summary-n { color: #ff6b6b; }
+</style>
+</head>
+<body>
+<div class="container" id="app"></div>
+
+<script src="quiz_data.js"></script>
+<script>
+// ════════════════════════════════════════════════
+// 常量
+// ════════════════════════════════════════════════
+const TYPE_MAP = { f: '时装与皮具', c: '化妆品与香水', w: '腕表与珠宝', o: '其他/零售', l: '酒类' };
+const TYPE_COLORS = { f: '#ff6b9d', c: '#ff9d6b', w: '#6bccff', o: '#9dff6b', l: '#ffd96b' };
+
+// 收集所有集团
+const GROUP_MAP = {};
+BRANDS.forEach(b => { GROUP_MAP[b[2]] = true; });
+const ALL_GROUPS = Object.keys(GROUP_MAP).sort();
+
+// ════════════════════════════════════════════════
+// 状态（全部放在 S 对象里）
+// ════════════════════════════════════════════════
+const S = {
+  mode: 'group',       // 'group' | 'type'
+  phase: 'quiz',       // 'quiz' | 'result'
+  queue: [],
+  totalCount: 0,
+  doneCount: 0,
+  correctCount: 0,
+  wrongCount: 0,
+  current: null,       // [en, cn, group, type]
+  currentOptions: [],
+  waitTimer: null,     // auto-jump timer
+  typeCorrect: { f:0, c:0, w:0, o:0, l:0 },
+  typeTotal:   { f:0, c:0, w:0, o:0, l:0 },
+  wrongByType:  {},
+  wrongByGroup: {},
+};
+
+// ════════════════════════════════════════════════
+// 工具
+// ════════════════════════════════════════════════
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function getCorrectAnswer(brand) {
+  return S.mode === 'group' ? brand[2] : TYPE_MAP[brand[3]];
+}
+
+function makeOptions(correct, pool, n = 4) {
+  const opts = new Set([correct]);
+  const rest = pool.filter(x => x !== correct);
+  shuffle(rest).slice(0, n - 1).forEach(x => opts.add(x));
+  return shuffle([...opts]);
+}
+
+// ════════════════════════════════════════════════
+// 出题
+// ════════════════════════════════════════════════
+function nextQuestion() {
+  // 清除旧计时器
+  if (S.waitTimer) { clearTimeout(S.waitTimer); S.waitTimer = null; }
+
+  if (S.queue.length === 0) {
+    S.phase = 'result';
+    render();
+    return;
+  }
+
+  S.current = S.queue.shift();
+  S.doneCount++;
+  S.typeTotal[S.current[3]]++;
+
+  const correct = getCorrectAnswer(S.current);
+  const pool = S.mode === 'group' ? ALL_GROUPS : Object.values(TYPE_MAP);
+  S.currentOptions = makeOptions(correct, pool, 4);
+  S.phase = 'quiz';
+  render();
+}
+
+// ════════════════════════════════════════════════
+// 答题（统一入口，通过事件委托调用）
+// ════════════════════════════════════════════════
+function handleAnswer(selected) {
+  // 防止重复触发（等待动画期间忽略点击）
+  if (S.waitTimer || S.phase !== 'quiz') return;
+
+  const correct = getCorrectAnswer(S.current);
+  const brand = S.current;
+
+  // 记录错误统计
+  function recordWrong() {
+    S.wrongCount++;
+    if (S.mode === 'group') {
+      S.wrongByGroup[brand[2]] = (S.wrongByGroup[brand[2]] || 0) + 1;
+    } else {
+      S.wrongByType[brand[3]] = (S.wrongByType[brand[3]] || 0) + 1;
+    }
+  }
+
+  if (selected === correct) {
+    // 正确
+    S.correctCount++;
+    S.typeCorrect[brand[3]]++;
+    updateFeedback('✓ 正确，即将跳到下一题', 'correct');
+
+    // 给按钮和卡片加动画
+    const card = document.getElementById('qcard');
+    if (card) card.classList.add('flash');
+
+    // 禁用所有按钮防抖
+    document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
+    const skipBtn = document.getElementById('skipBtn');
+    if (skipBtn) skipBtn.disabled = true;
+
+    // 用 CSS animationend 触发跳转（绝对可靠，不依赖 JS timer）
+    S.waitTimer = true; // 锁住，防止动画期间重复触发
+    const onEnd = () => {
+      S.waitTimer = false;
+      nextQuestion();
+    };
+    document.addEventListener('quiz-jump', onEnd, { once: true });
+    // 备用：500ms 超时兜底
+    setTimeout(() => document.dispatchEvent(new Event('quiz-jump')), 500);
+
+  } else {
+    // 错误
+    recordWrong();
+    updateFeedback(`✗ 正确答案是：${correct}`, 'wrong');
+    // 错误时不解锁，保留交互让用户点任意处继续
+    document.addEventListener('click', function resumeOnClick(e) {
+      if (e.target.dataset.action === 'answer' || e.target.id === 'skipBtn') return;
+      document.removeEventListener('click', resumeOnClick);
+      nextQuestion();
+    }, { once: true });
+  }
+}
+
+function handleSkip() {
+  if (S.waitTimer || S.phase !== 'quiz') return;
+
+  S.wrongCount++;
+  if (S.mode === 'group') {
+    S.wrongByGroup[S.current[2]] = (S.wrongByGroup[S.current[2]] || 0) + 1;
+  } else {
+    S.wrongByType[S.current[3]] = (S.wrongByType[S.current[3]] || 0) + 1;
+  }
+  const correct = getCorrectAnswer(S.current);
+  updateFeedback(`正确答案是：${correct}，即将跳到下一题`, 'skip');
+
+  const card = document.getElementById('qcard');
+  if (card) card.classList.add('skip-flash');
+
+  document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
+  const skipBtn = document.getElementById('skipBtn');
+  if (skipBtn) skipBtn.disabled = true;
+
+  S.waitTimer = true;
+  const onEnd = () => {
+    S.waitTimer = false;
+    nextQuestion();
+  };
+  document.addEventListener('quiz-jump', onEnd, { once: true });
+  setTimeout(() => document.dispatchEvent(new Event('quiz-jump')), 500);
+}
+
+function updateFeedback(msg, cls) {
+  const el = document.getElementById('feedback');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = cls === 'correct' ? '#4cff91'
+                 : cls === 'wrong' ? '#ff8080'
+                 : '#8888bb';
+}
+
+// ════════════════════════════════════════════════
+// 事件委托（唯一的全局点击处理）
+// ════════════════════════════════════════════════
+document.getElementById('app').addEventListener('click', function(e) {
+  const target = e.target.closest('[data-action]');
+  if (!target) return;
+  const action = target.dataset.action;
+
+  if (action === 'answer') {
+    handleAnswer(target.dataset.answer);
+  } else if (action === 'skip') {
+    handleSkip();
+  } else if (action === 'switchMode') {
+    switchMode(target.dataset.mode);
+  } else if (action === 'restart') {
+    restart();
+  }
+});
+
+// ════════════════════════════════════════════════
+// 切换模式 & 重启
+// ════════════════════════════════════════════════
+function switchMode(newMode) {
+  if (S.waitTimer) { clearTimeout(S.waitTimer); S.waitTimer = null; }
+  S.mode = newMode;
+  S.queue = shuffle([...BRANDS]);
+  S.totalCount = BRANDS.length;
+  S.doneCount = 0;
+  S.correctCount = 0;
+  S.wrongCount = 0;
+  S.typeCorrect = { f:0, c:0, w:0, o:0, l:0 };
+  S.typeTotal   = { f:0, c:0, w:0, o:0, l:0 };
+  S.wrongByType = {};
+  S.wrongByGroup = {};
+  nextQuestion();
+}
+
+function restart() {
+  switchMode(S.mode);
+}
+
+// ════════════════════════════════════════════════
+// 渲染
+// ════════════════════════════════════════════════
+function render() {
+  const app = document.getElementById('app');
+  if (S.phase === 'result') {
+    app.innerHTML = renderResult();
+    return;
+  }
+
+  const pct = S.totalCount > 0 ? Math.round((S.doneCount / S.totalCount) * 100) : 0;
+  const qLabel = S.mode === 'group' ? '这个品牌属于哪个集团？' : '这个品牌属于哪个品类？';
+  const [en, cn, group, typ] = S.current;
+  const brandCn = cn ? `（${cn}）` : '';
+
+  const optionsHtml = S.currentOptions.map(opt =>
+    `<button class="option-btn" data-action="answer" data-answer="${esc(opt)}">${opt}</button>`
+  ).join('');
+
+  const typePillsHtml = Object.entries(TYPE_MAP).map(([k, v]) =>
+    `<span class="type-pill" style="border-color:${TYPE_COLORS[k]};color:${TYPE_COLORS[k]}">${k}·${v}</span>`
+  ).join('');
+
+  const summaryHtml = Object.entries(TYPE_MAP).map(([k, v]) => {
+    const tot = S.typeTotal[k], cor = S.typeCorrect[k];
+    const cls = tot > 0 ? (cor / tot >= 0.7 ? 'good' : cor > 0 && tot > 0 ? 'bad' : '') : '';
+    return `<div class="summary-item ${cls}">
+      <div class="summary-n">${cor}<span style="font-size:13px;color:#555">/${tot}</span></div>
+      <div class="summary-l">${k} ${v.slice(0,4)}</div>
+    </div>`;
+  }).join('');
+
+  app.innerHTML = `
+    <div class="status-bar">
+      <span>${S.doneCount} / ${S.totalCount}</span>
+      <div class="progress-bar-wrap"><div class="progress-bar" style="width:${pct}%"></div></div>
+      <span class="correct-badge">✓ ${S.correctCount}</span>
+    </div>
+
+    <div class="type-legend">${typePillsHtml}</div>
+
+    <div class="mode-tabs">
+      <button class="mode-tab ${S.mode==='group'?'active':''}" data-action="switchMode" data-mode="group">考集团归属</button>
+      <button class="mode-tab ${S.mode==='type'?'active':''}" data-action="switchMode" data-mode="type">考品类分类</button>
+    </div>
+
+    <div class="card" id="qcard">
+      <div class="question-label">${S.doneCount} / ${S.totalCount}</div>
+      <div class="brand-name">${en}</div>
+      <div class="brand-cn">${brandCn}</div>
+      <div class="answer-hint">${qLabel}</div>
+      <div class="options-grid ${S.mode==='type'?'cols-1':''}">
+        ${optionsHtml}
+      </div>
+      <div class="feedback" id="feedback"></div>
+    </div>
+
+    <button class="skip-btn" id="skipBtn" data-action="skip">跳过此题（显示答案）→</button>
+
+    <div class="summary-grid">${summaryHtml}</div>
+  `;
+}
+
+function esc(s) {
+  return String(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function renderResult() {
+  const rate = S.totalCount > 0 ? Math.round((S.correctCount / S.totalCount) * 100) : 0;
+  const emoji = rate >= 90 ? '🏆' : rate >= 70 ? '👏' : rate >= 50 ? '💪' : '📚';
+  const msg = rate >= 90 ? '太厉害了！全部掌握！'
+            : rate >= 70 ? '很棒！继续加油！'
+            : rate >= 50 ? '不错，再接再厉！' : '多练几遍就熟悉了！';
+
+  const typeDetailHtml = Object.entries(TYPE_MAP).map(([k, v]) => {
+    const tot = S.typeTotal[k], cor = S.typeCorrect[k];
+    const pct = tot > 0 ? Math.round(cor / tot * 100) : 0;
+    return `<span class="type-pill" style="border-color:${TYPE_COLORS[k]};color:${TYPE_COLORS[k]}">${k}·${v} ${cor}/${tot}(${pct}%)</span>`;
+  }).join('');
+
+  const weakTypeHtml = Object.keys(S.wrongByType).length > 0
+    ? `<div class="card" style="text-align:left;margin-top:16px">
+        <div style="font-size:13px;color:#888;margin-bottom:12px">品类薄弱点</div>
+        ${Object.entries(S.wrongByType).sort((a,b)=>b[1]-a[1]).map(([k,cnt]) =>
+          `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #2a2a45;font-size:14px">
+            <span style="color:${TYPE_COLORS[k]}">${TYPE_MAP[k]||k} (${k})</span>
+            <span style="color:#ff6b6b">错 ${cnt} 题</span>
+          </div>`).join('')}
+       </div>` : '';
+
+  const weakGroupHtml = Object.keys(S.wrongByGroup).length > 0
+    ? `<div class="card" style="text-align:left;margin-top:16px">
+        <div style="font-size:13px;color:#888;margin-bottom:12px">集团薄弱点（错题最多的前10）</div>
+        ${Object.entries(S.wrongByGroup).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([g,cnt]) =>
+          `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #2a2a45;font-size:14px">
+            <span style="color:#aaa">${g}</span>
+            <span style="color:#ff6b6b">错 ${cnt} 题</span>
+          </div>`).join('')}
+       </div>` : '';
+
+  return `
+    <div class="result-card">
+      <div class="result-icon">${emoji}</div>
+      <div class="result-title">${msg}</div>
+      <div class="result-sub">正确率 ${rate}%</div>
+      <div class="result-stats">
+        <div class="stat-box green">
+          <div class="stat-num">${S.correctCount}</div>
+          <div class="stat-label">正确</div>
+        </div>
+        <div class="stat-box red">
+          <div class="stat-num">${S.wrongCount}</div>
+          <div class="stat-label">错误/跳过</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num">${S.totalCount}</div>
+          <div class="stat-label">总题数</div>
+        </div>
+      </div>
+    </div>
+    <div style="text-align:center;margin-bottom:8px"><span style="font-size:12px;color:#666">各品类正确率</span></div>
+    <div class="type-legend" style="margin-bottom:20px">${typeDetailHtml}</div>
+    ${weakTypeHtml}
+    ${weakGroupHtml}
+    <div style="text-align:center;margin-top:24px">
+      <button class="restart-btn" data-action="restart">再来一轮 🔄</button>
+    </div>
+  `;
+}
+
+// ════════════════════════════════════════════════
+// 启动
+// ════════════════════════════════════════════════
+S.queue = shuffle([...BRANDS]);
+S.totalCount = BRANDS.length;
+nextQuestion();
+</script>
+</body>
+</html>
