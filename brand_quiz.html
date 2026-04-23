@@ -221,12 +221,28 @@ function getFilteredBrands() {
   return BRANDS.filter(b => b[3] === S.typeFilter);
 }
 
+// 有美妆业务的集团（用于美妆品牌考集团归属时的选项）
+const COS_GROUPS = [
+  'Estee Lauder 雅诗兰黛',
+  'LVMH 路威酩轩',
+  'Puig 普伊格',
+];
+
+function getCosGroupOptions(correct) {
+  // 4个选项 = L'Oreal固定 + 雅诗兰黛固定 + LVMH固定 + 1个随机
+  const fixed = ['LOreal 欧莱雅', 'Estee Lauder 雅诗兰黛', 'LVMH 路威酩轩'];
+  const rest = COS_GROUPS.filter(g => !fixed.includes(g));
+  const rand = shuffle(rest).slice(0, 1);
+  return shuffle([...fixed, ...rand]);
+}
+
 // ════════════════════════════════════════════════
 // 状态（全部放在 S 对象里）
 // ════════════════════════════════════════════════
 const S = {
   mode: 'group',       // 'group' | 'type'
   typeFilter: null,    // null = 全部, 或类型码如 'g', 'f', 'c', 'w'
+  prev: null,         // 上一题快照 {brand, correct, options, selected, isCorrect}
   phase: 'quiz',       // 'quiz' | 'result'
   queue: [],
   totalCount: 0,
@@ -283,8 +299,13 @@ function nextQuestion() {
   S.typeTotal[S.current[3]]++;
 
   const correct = getCorrectAnswer(S.current);
-  const pool = S.mode === 'group' ? ALL_GROUPS : Object.values(TYPE_MAP);
-  S.currentOptions = makeOptions(correct, pool, 4);
+  // 美妆品牌（类型c）：选项来自有美妆业务的集团
+  if (S.current[3] === 'c') {
+    S.currentOptions = getCosGroupOptions(correct);
+  } else {
+    const pool = S.mode === 'group' ? ALL_GROUPS : Object.values(TYPE_MAP);
+    S.currentOptions = makeOptions(correct, pool, 4);
+  }
   S.phase = 'quiz';
   render();
 }
@@ -298,6 +319,15 @@ function handleAnswer(selected) {
 
   const correct = getCorrectAnswer(S.current);
   const brand = S.current;
+
+  // 保存上一题快照（用于"回到上一题"）
+  S.prev = {
+    brand,
+    correct,
+    options: [...S.currentOptions],
+    selected,
+    isCorrect: selected === correct
+  };
 
   // 记录错误统计
   function recordWrong() {
@@ -350,6 +380,15 @@ function handleAnswer(selected) {
 function handleSkip() {
   if (S.waitTimer || S.phase !== 'quiz') return;
 
+  // 保存上一题快照
+  S.prev = {
+    brand: S.current,
+    correct: getCorrectAnswer(S.current),
+    options: [...S.currentOptions],
+    selected: null,
+    isCorrect: false
+  };
+
   S.wrongCount++;
   if (S.mode === 'group') {
     S.wrongByGroup[S.current[2]] = (S.wrongByGroup[S.current[2]] || 0) + 1;
@@ -400,6 +439,8 @@ document.getElementById('app').addEventListener('click', function(e) {
     switchMode(target.dataset.mode);
   } else if (action === 'setFilter') {
     setFilter(target.dataset.filter === 'null' ? null : target.dataset.filter);
+  } else if (action === 'prevQuestion') {
+    prevQuestion();
   } else if (action === 'restart') {
     restart();
   }
@@ -411,6 +452,7 @@ document.getElementById('app').addEventListener('click', function(e) {
 function switchMode(newMode) {
   if (S.waitTimer) { clearTimeout(S.waitTimer); S.waitTimer = null; }
   S.mode = newMode;
+  S.prev = null;
   const pool = getFilteredBrands();
   S.queue = shuffle([...pool]);
   S.totalCount = pool.length;
@@ -438,6 +480,40 @@ function setFilter(f) {
   S.wrongByType = {};
   S.wrongByGroup = {};
   nextQuestion();
+}
+
+function prevQuestion() {
+  if (!S.prev || S.doneCount <= 1) return;
+  // 恢复上一题状态
+  S.current = S.prev.brand;
+  S.currentOptions = S.prev.options;
+  // 恢复计数（撤销 doneCount、wrongCount/correctCount、typeTotal）
+  S.doneCount--;
+  S.typeTotal[S.current[3]]--;
+  if (S.prev.isCorrect) {
+    S.correctCount--;
+    S.typeCorrect[S.current[3]]--;
+  } else {
+    S.wrongCount--;
+    if (S.mode === 'group') {
+      S.wrongByGroup[S.current[2]] = Math.max(0, (S.wrongByGroup[S.current[2]] || 0) - 1);
+    } else {
+      S.wrongByType[S.current[3]] = Math.max(0, (S.wrongByType[S.current[3]] || 0) - 1);
+    }
+  }
+  // 恢复 prev（允许连续回退）
+  const saved = S.prev;
+  S.prev = null; // 先清空，防止 prevQuestion 被错误调用时出错
+  S.phase = 'quiz';
+  render();
+  // 显示上次的答题状态
+  if (saved.selected) {
+    const btn = document.querySelector(`[data-answer="${esc(saved.correct)}"]`);
+    if (btn) {
+      const isRight = saved.selected === saved.correct;
+      btn.classList.add(isRight ? 'correct' : 'wrong');
+    }
+  }
 }
 
 function restart() {
@@ -522,6 +598,8 @@ function render() {
     </div>
 
     <button class="skip-btn" id="skipBtn" data-action="skip">跳过此题（显示答案）→</button>
+
+    ${S.doneCount > 1 ? '<button class="skip-btn" style="margin-top:6px;color:#444466" data-action="prevQuestion">← 回到上一题</button>' : ''}
 
     <div class="summary-grid">${summaryHtml}</div>
   `;
