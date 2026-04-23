@@ -43,6 +43,26 @@
 
   .mode-tabs { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
 
+  .filter-bar {
+    display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .type-filter-btn {
+    padding: 6px 12px; border-radius: 6px;
+    border: 1px solid #333355; background: #1a1a2e;
+    color: #8888bb; cursor: pointer;
+    font-size: 12px; transition: all 0.18s;
+  }
+
+  .type-filter-btn:hover:not(.active) {
+    border-color: #555577; color: #aaaacc;
+  }
+
+  .type-filter-btn.active {
+    font-weight: 600;
+  }
+
   .mode-tab {
     padding: 8px 16px; border-radius: 8px; border: 1px solid #333355;
     background: #1a1a2e; color: #8888bb; cursor: pointer;
@@ -187,19 +207,26 @@
 // ════════════════════════════════════════════════
 // 常量
 // ════════════════════════════════════════════════
-const TYPE_MAP = { f: '时装与皮具', c: '化妆品与香水', w: '腕表与珠宝', o: '其他/零售', l: '酒类' };
-const TYPE_COLORS = { f: '#ff6b9d', c: '#ff9d6b', w: '#6bccff', o: '#9dff6b', l: '#ffd96b' };
+const TYPE_MAP = { f: '时装与皮具', c: '化妆品与香水', w: '腕表与珠宝', o: '其他/零售', l: '酒类', g: '眼镜' };
+const TYPE_COLORS = { f: '#ff6b9d', c: '#ff9d6b', w: '#6bccff', o: '#9dff6b', l: '#ffd96b', g: '#c084fc' };
 
 // 收集所有集团
 const GROUP_MAP = {};
 BRANDS.forEach(b => { GROUP_MAP[b[2]] = true; });
 const ALL_GROUPS = Object.keys(GROUP_MAP).sort();
 
+// 根据当前类型筛选器获取品牌池
+function getFilteredBrands() {
+  if (!S.typeFilter) return BRANDS;
+  return BRANDS.filter(b => b[3] === S.typeFilter);
+}
+
 // ════════════════════════════════════════════════
 // 状态（全部放在 S 对象里）
 // ════════════════════════════════════════════════
 const S = {
   mode: 'group',       // 'group' | 'type'
+  typeFilter: null,    // null = 全部, 或类型码如 'g', 'f', 'c', 'w'
   phase: 'quiz',       // 'quiz' | 'result'
   queue: [],
   totalCount: 0,
@@ -209,8 +236,8 @@ const S = {
   current: null,       // [en, cn, group, type]
   currentOptions: [],
   waitTimer: null,     // auto-jump timer
-  typeCorrect: { f:0, c:0, w:0, o:0, l:0 },
-  typeTotal:   { f:0, c:0, w:0, o:0, l:0 },
+  typeCorrect: { f:0, c:0, w:0, o:0, l:0, g:0 },
+  typeTotal:   { f:0, c:0, w:0, o:0, l:0, g:0 },
   wrongByType:  {},
   wrongByGroup: {},
 };
@@ -371,6 +398,8 @@ document.getElementById('app').addEventListener('click', function(e) {
     handleSkip();
   } else if (action === 'switchMode') {
     switchMode(target.dataset.mode);
+  } else if (action === 'setFilter') {
+    setFilter(target.dataset.filter === 'null' ? null : target.dataset.filter);
   } else if (action === 'restart') {
     restart();
   }
@@ -382,13 +411,30 @@ document.getElementById('app').addEventListener('click', function(e) {
 function switchMode(newMode) {
   if (S.waitTimer) { clearTimeout(S.waitTimer); S.waitTimer = null; }
   S.mode = newMode;
-  S.queue = shuffle([...BRANDS]);
-  S.totalCount = BRANDS.length;
+  const pool = getFilteredBrands();
+  S.queue = shuffle([...pool]);
+  S.totalCount = pool.length;
   S.doneCount = 0;
   S.correctCount = 0;
   S.wrongCount = 0;
-  S.typeCorrect = { f:0, c:0, w:0, o:0, l:0 };
-  S.typeTotal   = { f:0, c:0, w:0, o:0, l:0 };
+  S.typeCorrect = { f:0, c:0, w:0, o:0, l:0, g:0 };
+  S.typeTotal   = { f:0, c:0, w:0, o:0, l:0, g:0 };
+  S.wrongByType = {};
+  S.wrongByGroup = {};
+  nextQuestion();
+}
+
+function setFilter(f) {
+  if (S.waitTimer) { clearTimeout(S.waitTimer); S.waitTimer = null; }
+  S.typeFilter = f;
+  const pool = getFilteredBrands();
+  S.queue = shuffle([...pool]);
+  S.totalCount = pool.length;
+  S.doneCount = 0;
+  S.correctCount = 0;
+  S.wrongCount = 0;
+  S.typeCorrect = { f:0, c:0, w:0, o:0, l:0, g:0 };
+  S.typeTotal   = { f:0, c:0, w:0, o:0, l:0, g:0 };
   S.wrongByType = {};
   S.wrongByGroup = {};
   nextQuestion();
@@ -421,6 +467,19 @@ function render() {
     `<span class="type-pill" style="border-color:${TYPE_COLORS[k]};color:${TYPE_COLORS[k]}">${k}·${v}</span>`
   ).join('');
 
+  const filterBtnHtml = Object.entries(TYPE_MAP).map(([k, v]) =>
+    `<button class="type-filter-btn ${S.typeFilter===k?'active':''}"
+      data-action="setFilter" data-filter="${k}"
+      style="${S.typeFilter===k ? `background:${TYPE_COLORS[k]}20;border-color:${TYPE_COLORS[k]};color:${TYPE_COLORS[k]}` : ''}">
+      ${k} ${v}
+    </button>`
+  ).join('');
+
+  const allActive = S.typeFilter === null;
+  const allBtnStyle = allActive
+    ? 'background:#2a2a5e;border-color:#6c63ff;color:#a0a0ff'
+    : '';
+
   const summaryHtml = Object.entries(TYPE_MAP).map(([k, v]) => {
     const tot = S.typeTotal[k], cor = S.typeCorrect[k];
     const cls = tot > 0 ? (cor / tot >= 0.7 ? 'good' : cor > 0 && tot > 0 ? 'bad' : '') : '';
@@ -438,6 +497,13 @@ function render() {
     </div>
 
     <div class="type-legend">${typePillsHtml}</div>
+
+    <div class="filter-bar">
+      <button class="type-filter-btn all-filter ${allActive?'active':''}"
+        data-action="setFilter" data-filter="null"
+        style="${allBtnStyle}">全部</button>
+      ${filterBtnHtml}
+    </div>
 
     <div class="mode-tabs">
       <button class="mode-tab ${S.mode==='group'?'active':''}" data-action="switchMode" data-mode="group">考集团归属</button>
@@ -531,8 +597,9 @@ function renderResult() {
 // ════════════════════════════════════════════════
 // 启动
 // ════════════════════════════════════════════════
-S.queue = shuffle([...BRANDS]);
-S.totalCount = BRANDS.length;
+const initPool = getFilteredBrands();
+S.queue = shuffle([...initPool]);
+S.totalCount = initPool.length;
 nextQuestion();
 </script>
 </body>
