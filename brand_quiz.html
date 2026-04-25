@@ -218,7 +218,7 @@ const ALL_GROUPS = Object.keys(GROUP_MAP).sort();
 // 根据当前类型筛选器获取品牌池
 function getFilteredBrands() {
   if (!S.typeFilter) return BRANDS;
-  return BRANDS.filter(b => b[3] === S.typeFilter);
+  return BRANDS.filter(b => b[4] === S.typeFilter);
 }
 
 // 有美妆业务的集团（用于美妆品牌考集团归属时的选项）
@@ -239,6 +239,15 @@ function getCosGroupOptions(correct) {
 // ════════════════════════════════════════════════
 // 状态（全部放在 S 对象里）
 // ════════════════════════════════════════════════
+const WRONG_KEY = 'brand_quiz_wrongs';
+
+function loadWrongs() {
+  try { return JSON.parse(localStorage.getItem(WRONG_KEY) || '[]'); } catch { return []; }
+}
+function saveWrongs(arr) {
+  localStorage.setItem(WRONG_KEY, JSON.stringify(arr));
+}
+
 const S = {
   mode: 'group',       // 'group' | 'type'
   typeFilter: null,    // null = 全部, 或类型码如 'g', 'f', 'c', 'w'
@@ -249,14 +258,48 @@ const S = {
   doneCount: 0,
   correctCount: 0,
   wrongCount: 0,
-  current: null,       // [en, cn, group, type]
+  current: null,       // [cn, enBrand, groupDisplay, groupInternal, type]
   currentOptions: [],
   waitTimer: null,     // auto-jump timer
   typeCorrect: { f:0, c:0, w:0, o:0, l:0, g:0 },
   typeTotal:   { f:0, c:0, w:0, o:0, l:0, g:0 },
   wrongByType:  {},
   wrongByGroup: {},
+  wrongReviewMode: false,   // 是否在错题复习模式
+  wrongQueue: [],           // 错题复习用的题库
+  wrongDoneCount: 0,        // 错题复习模式中的完成数
+  wrongCorrectCount: 0,      // 错题复习模式中的答对数
 };
+
+// ════════════════════════════════════════════════
+// 错题集合管理
+// ════════════════════════════════════════════════
+function wrongAdd(entry) {
+  // entry: {brand, mode, correct, options, selected}
+  const wrongs = loadWrongs();
+  // 用 brand+mode 作为唯一标识，去重
+  const key = entry.brand[0] + '|' + entry.mode;
+  const exists = wrongs.findIndex(w => w.key === key);
+  if (exists >= 0) {
+    wrongs[exists] = { ...entry, key, ts: Date.now() };
+  } else {
+    wrongs.push({ ...entry, key, ts: Date.now() });
+  }
+  saveWrongs(wrongs);
+}
+
+function wrongRemove(key) {
+  const wrongs = loadWrongs().filter(w => w.key !== key);
+  saveWrongs(wrongs);
+}
+
+function wrongClear() {
+  saveWrongs([]);
+}
+
+function getWrongCount() {
+  return loadWrongs().length;
+}
 
 // ════════════════════════════════════════════════
 // 工具
@@ -271,7 +314,7 @@ function shuffle(arr) {
 }
 
 function getCorrectAnswer(brand) {
-  return S.mode === 'group' ? brand[2] : TYPE_MAP[brand[3]];
+  return S.mode === 'group' ? brand[2] : TYPE_MAP[brand[4]];
 }
 
 function makeOptions(correct, pool, n = 4) {
@@ -288,6 +331,25 @@ function nextQuestion() {
   // 清除旧计时器
   if (S.waitTimer) { clearTimeout(S.waitTimer); S.waitTimer = null; }
 
+  if (S.wrongReviewMode) {
+    // 错题复习模式：从错题队列中出题
+    if (S.wrongQueue.length === 0) {
+      // 全部复习完，退出复习模式并显示结果
+      const rate = getWrongCount() === 0 ? 100 : 0;
+      S.wrongReviewMode = false;
+      S.phase = 'result';
+      render();
+      return;
+    }
+    const entry = S.wrongQueue.shift();
+    S.current = entry.brand;
+    S.currentOptions = entry.options;
+    S.mode = entry.mode;
+    S.wrongDoneCount++;
+    render();
+    return;
+  }
+
   if (S.queue.length === 0) {
     S.phase = 'result';
     render();
@@ -296,11 +358,11 @@ function nextQuestion() {
 
   S.current = S.queue.shift();
   S.doneCount++;
-  S.typeTotal[S.current[3]]++;
+  S.typeTotal[S.current[4]]++;
 
   const correct = getCorrectAnswer(S.current);
   // 美妆品牌（类型c）：选项来自有美妆业务的集团
-  if (S.current[3] === 'c') {
+  if (S.current[4] === 'c') {
     S.currentOptions = getCosGroupOptions(correct);
   } else {
     const pool = S.mode === 'group' ? ALL_GROUPS : Object.values(TYPE_MAP);
@@ -335,14 +397,22 @@ function handleAnswer(selected) {
     if (S.mode === 'group') {
       S.wrongByGroup[brand[2]] = (S.wrongByGroup[brand[2]] || 0) + 1;
     } else {
-      S.wrongByType[brand[3]] = (S.wrongByType[brand[3]] || 0) + 1;
+      S.wrongByType[brand[4]] = (S.wrongByType[brand[4]] || 0) + 1;
     }
   }
 
   if (selected === correct) {
     // 正确
     S.correctCount++;
-    S.typeCorrect[brand[3]]++;
+    S.typeCorrect[brand[4]]++;
+
+    // 错题复习模式：答对了从错题集移除
+    if (S.wrongReviewMode) {
+      S.wrongCorrectCount++;
+      const key = brand[0] + '|' + S.mode;
+      wrongRemove(key);
+    }
+
     updateFeedback('✓ 正确，即将跳到下一题', 'correct');
 
     // 给按钮和卡片加动画
@@ -367,6 +437,18 @@ function handleAnswer(selected) {
   } else {
     // 错误
     recordWrong();
+
+    // 错题复习模式不重复加入（已经在错题集里了）
+    if (!S.wrongReviewMode) {
+      wrongAdd({
+        brand,
+        mode: S.mode,
+        correct,
+        options: [...S.currentOptions],
+        selected
+      });
+    }
+
     updateFeedback(`✗ 正确答案是：${correct}`, 'wrong');
     // 错误时不解锁，保留交互让用户点任意处继续
     document.addEventListener('click', function resumeOnClick(e) {
@@ -393,8 +475,20 @@ function handleSkip() {
   if (S.mode === 'group') {
     S.wrongByGroup[S.current[2]] = (S.wrongByGroup[S.current[2]] || 0) + 1;
   } else {
-    S.wrongByType[S.current[3]] = (S.wrongByType[S.current[3]] || 0) + 1;
+    S.wrongByType[S.current[4]] = (S.wrongByType[S.current[4]] || 0) + 1;
   }
+
+  // 跳过也算错，加入错题集（非复习模式）
+  if (!S.wrongReviewMode) {
+    wrongAdd({
+      brand: S.current,
+      mode: S.mode,
+      correct: getCorrectAnswer(S.current),
+      options: [...S.currentOptions],
+      selected: null
+    });
+  }
+
   const correct = getCorrectAnswer(S.current);
   updateFeedback(`正确答案是：${correct}，即将跳到下一题`, 'skip');
 
@@ -437,20 +531,64 @@ document.getElementById('app').addEventListener('click', function(e) {
     handleSkip();
   } else if (action === 'switchMode') {
     switchMode(target.dataset.mode);
+  } else if (action === 'switchToWrongReview') {
+    switchToWrongReview();
   } else if (action === 'setFilter') {
     setFilter(target.dataset.filter === 'null' ? null : target.dataset.filter);
   } else if (action === 'prevQuestion') {
     prevQuestion();
   } else if (action === 'restart') {
     restart();
+  } else if (action === 'exitWrongReview') {
+    exitWrongReview();
+  } else if (action === 'clearWrongReview') {
+    clearWrongAnswers();
   }
 });
+
+// ════════════════════════════════════════════════
+// 错题复习模式
+// ════════════════════════════════════════════════
+function switchToWrongReview() {
+  const wrongs = loadWrongs();
+  if (wrongs.length === 0) {
+    alert('暂无错题，继续加油！');
+    return;
+  }
+  if (S.waitTimer) { clearTimeout(S.waitTimer); S.waitTimer = null; }
+  S.wrongReviewMode = true;
+  S.wrongQueue = shuffle([...wrongs]);
+  S.wrongDoneCount = 0;
+  S.wrongCorrectCount = 0;
+  // 从第一条错题开始
+  if (S.wrongQueue.length > 0) {
+    const first = S.wrongQueue[0];
+    S.current = first.brand;
+    S.currentOptions = first.options;
+    S.mode = first.mode;
+    S.phase = 'quiz';
+  }
+  render();
+}
+
+function exitWrongReview() {
+  if (S.waitTimer) { clearTimeout(S.waitTimer); S.waitTimer = null; }
+  S.wrongReviewMode = false;
+  switchMode(S.mode);
+}
+
+function clearWrongAnswers() {
+  if (!confirm('确定清空全部错题记录？')) return;
+  wrongClear();
+  render();
+}
 
 // ════════════════════════════════════════════════
 // 切换模式 & 重启
 // ════════════════════════════════════════════════
 function switchMode(newMode) {
   if (S.waitTimer) { clearTimeout(S.waitTimer); S.waitTimer = null; }
+  S.wrongReviewMode = false;
   S.mode = newMode;
   S.prev = null;
   const pool = getFilteredBrands();
@@ -468,6 +606,7 @@ function switchMode(newMode) {
 
 function setFilter(f) {
   if (S.waitTimer) { clearTimeout(S.waitTimer); S.waitTimer = null; }
+  S.wrongReviewMode = false;
   S.typeFilter = f;
   const pool = getFilteredBrands();
   S.queue = shuffle([...pool]);
@@ -489,16 +628,16 @@ function prevQuestion() {
   S.currentOptions = S.prev.options;
   // 恢复计数（撤销 doneCount、wrongCount/correctCount、typeTotal）
   S.doneCount--;
-  S.typeTotal[S.current[3]]--;
+  S.typeTotal[S.current[4]]--;
   if (S.prev.isCorrect) {
     S.correctCount--;
-    S.typeCorrect[S.current[3]]--;
+    S.typeCorrect[S.current[4]]--;
   } else {
     S.wrongCount--;
     if (S.mode === 'group') {
       S.wrongByGroup[S.current[2]] = Math.max(0, (S.wrongByGroup[S.current[2]] || 0) - 1);
     } else {
-      S.wrongByType[S.current[3]] = Math.max(0, (S.wrongByType[S.current[3]] || 0) - 1);
+      S.wrongByType[S.current[4]] = Math.max(0, (S.wrongByType[S.current[4]] || 0) - 1);
     }
   }
   // 恢复 prev（允许连续回退）
@@ -530,10 +669,17 @@ function render() {
     return;
   }
 
+  // 错题复习模式渲染
+  if (S.wrongReviewMode) {
+    app.innerHTML = renderWrongReview();
+    return;
+  }
+
   const pct = S.totalCount > 0 ? Math.round((S.doneCount / S.totalCount) * 100) : 0;
   const qLabel = S.mode === 'group' ? '这个品牌属于哪个集团？' : '这个品牌属于哪个品类？';
-  const [en, cn, group, typ] = S.current;
-  const brandCn = cn ? `（${cn}）` : '';
+  // [cn, enBrand, groupDisplay, groupInternal, typ]
+  const [cn, enBrand, groupDisplay, groupInternal, typ] = S.current;
+  const brandEnHint = enBrand ? `（${enBrand}）` : '';
 
   const optionsHtml = S.currentOptions.map(opt =>
     `<button class="option-btn" data-action="answer" data-answer="${esc(opt)}">${opt}</button>`
@@ -570,6 +716,7 @@ function render() {
       <span>${S.doneCount} / ${S.totalCount}</span>
       <div class="progress-bar-wrap"><div class="progress-bar" style="width:${pct}%"></div></div>
       <span class="correct-badge">✓ ${S.correctCount}</span>
+      ${S.wrongCount > 0 ? `<span style="color:#ff8080;font-size:13px;margin-left:8px">✗ ${S.wrongCount}</span>` : ''}
     </div>
 
     <div class="type-legend">${typePillsHtml}</div>
@@ -584,12 +731,16 @@ function render() {
     <div class="mode-tabs">
       <button class="mode-tab ${S.mode==='group'?'active':''}" data-action="switchMode" data-mode="group">考集团归属</button>
       <button class="mode-tab ${S.mode==='type'?'active':''}" data-action="switchMode" data-mode="type">考品类分类</button>
+      <button class="mode-tab" data-action="switchToWrongReview"
+        style="border-color:#ff6b6b;color:#ff9d6b;${getWrongCount()>0?'background:#2a1a1a':''}">
+        错题复习 ${getWrongCount()>0?'('+getWrongCount()+')':''}
+      </button>
     </div>
 
     <div class="card" id="qcard">
       <div class="question-label">${S.doneCount} / ${S.totalCount}</div>
-      <div class="brand-name">${en}</div>
-      <div class="brand-cn">${brandCn}</div>
+      <div class="brand-name">${cn}</div>
+      <div class="brand-cn">${brandEnHint}</div>
       <div class="answer-hint">${qLabel}</div>
       <div class="options-grid ${S.mode==='type'?'cols-1':''}">
         ${optionsHtml}
@@ -607,6 +758,58 @@ function render() {
 
 function esc(s) {
   return String(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function renderWrongReview() {
+  const totalWrongs = S.wrongQueue.length + 1; // +1 当前题
+  const done = S.wrongDoneCount;
+  const pct = totalWrongs > 0 ? Math.round((done / totalWrongs) * 100) : 0;
+  // [cn, enBrand, groupDisplay, groupInternal, typ]
+  const [cn, enBrand, groupDisplay, groupInternal, typ] = S.current;
+  const brandEnHint = enBrand ? `（${enBrand}）` : '';
+  const qLabel = S.mode === 'group' ? '这个品牌属于哪个集团？' : '这个品牌属于哪个品类？';
+
+  const optionsHtml = S.currentOptions.map(opt =>
+    `<button class="option-btn" data-action="answer" data-answer="${esc(opt)}">${opt}</button>`
+  ).join('');
+
+  const typePillsHtml = Object.entries(TYPE_MAP).map(([k, v]) =>
+    `<span class="type-pill" style="border-color:${TYPE_COLORS[k]};color:${TYPE_COLORS[k]}">${k}·${v}</span>`
+  ).join('');
+
+  return `
+    <div class="status-bar">
+      <span style="color:#ff9d6b">错题复习 ${done} / ${totalWrongs}</span>
+      <div class="progress-bar-wrap"><div class="progress-bar" style="width:${pct}%;background:#ff6b6b"></div></div>
+      <span style="color:#ff9d6b">剩余 ${S.wrongQueue.length}</span>
+    </div>
+
+    <div style="text-align:center;margin-bottom:12px">
+      <button class="mode-tab" data-action="exitWrongReview"
+        style="background:#2a2a3a;border-color:#ff6b6b;color:#ff9d6b;border-radius:8px;padding:6px 16px;cursor:pointer">
+        ← 退出错题复习
+      </button>
+      <button class="mode-tab" data-action="clearWrongReview"
+        style="background:#2a2a3a;border-color:#555;color:#888;border-radius:8px;padding:6px 16px;cursor:pointer;margin-left:8px">
+        清空错题
+      </button>
+    </div>
+
+    <div class="type-legend">${typePillsHtml}</div>
+
+    <div class="card" id="qcard">
+      <div class="question-label">错题复习 ${done} / ${totalWrongs}</div>
+      <div class="brand-name">${cn}</div>
+      <div class="brand-cn">${brandEnHint}</div>
+      <div class="answer-hint">${qLabel}</div>
+      <div class="options-grid ${S.mode==='type'?'cols-1':''}">
+        ${optionsHtml}
+      </div>
+      <div class="feedback" id="feedback"></div>
+    </div>
+
+    <button class="skip-btn" id="skipBtn" data-action="skip">跳过此题（显示答案）→</button>
+  `;
 }
 
 function renderResult() {
@@ -666,8 +869,11 @@ function renderResult() {
     <div class="type-legend" style="margin-bottom:20px">${typeDetailHtml}</div>
     ${weakTypeHtml}
     ${weakGroupHtml}
-    <div style="text-align:center;margin-top:24px">
+    <div style="text-align:center;margin-top:24px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
       <button class="restart-btn" data-action="restart">再来一轮 🔄</button>
+      ${getWrongCount() > 0 ? `<button class="mode-tab" data-action="switchToWrongReview" style="background:#2a1a1a;border-color:#ff6b6b;color:#ff9d6b;padding:12px 24px;border-radius:10px;cursor:pointer;font-size:14px">
+        复习错题 (${getWrongCount()})
+      </button>` : ''}
     </div>
   `;
 }
