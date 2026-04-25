@@ -226,6 +226,7 @@ const COS_GROUPS = [
   'Estee Lauder 雅诗兰黛',
   'LVMH 路威酩轩',
   'Puig 普伊格',
+  'LOreal 欧莱雅',
 ];
 
 function getCosGroupOptions(correct) {
@@ -261,6 +262,7 @@ const S = {
   current: null,       // [cn, enBrand, groupDisplay, groupInternal, type]
   currentOptions: [],
   waitTimer: null,     // auto-jump timer
+  autoJump: true,      // 自动跳下一题（答对/跳过后自动跳转）
   typeCorrect: { f:0, c:0, w:0, o:0, l:0, g:0 },
   typeTotal:   { f:0, c:0, w:0, o:0, l:0, g:0 },
   wrongByType:  {},
@@ -450,12 +452,20 @@ function handleAnswer(selected) {
     }
 
     updateFeedback(`✗ 正确答案是：${correct}`, 'wrong');
-    // 错误时不解锁，保留交互让用户点任意处继续
-    document.addEventListener('click', function resumeOnClick(e) {
-      if (e.target.dataset.action === 'answer' || e.target.id === 'skipBtn') return;
-      document.removeEventListener('click', resumeOnClick);
-      nextQuestion();
-    }, { once: true });
+    if (S.autoJump) {
+      // 自动跳：1秒后自动下一题
+      S.waitTimer = true;
+      const onEnd = () => { S.waitTimer = false; nextQuestion(); };
+      document.addEventListener('quiz-jump', onEnd, { once: true });
+      setTimeout(() => document.dispatchEvent(new Event('quiz-jump')), 1000);
+    } else {
+      // 手动跳：点任意处继续
+      document.addEventListener('click', function resumeOnClick(e) {
+        if (e.target.dataset.action === 'answer' || e.target.id === 'skipBtn') return;
+        document.removeEventListener('click', resumeOnClick);
+        nextQuestion();
+      }, { once: true });
+    }
   }
 }
 
@@ -543,6 +553,9 @@ document.getElementById('app').addEventListener('click', function(e) {
     exitWrongReview();
   } else if (action === 'clearWrongReview') {
     clearWrongAnswers();
+  } else if (action === 'toggleAutoJump') {
+    S.autoJump = !S.autoJump;
+    render();
   }
 });
 
@@ -731,6 +744,10 @@ function render() {
     <div class="mode-tabs">
       <button class="mode-tab ${S.mode==='group'?'active':''}" data-action="switchMode" data-mode="group">考集团归属</button>
       <button class="mode-tab ${S.mode==='type'?'active':''}" data-action="switchMode" data-mode="type">考品类分类</button>
+      <button class="mode-tab ${S.autoJump?'active':''}" data-action="toggleAutoJump"
+        style="${S.autoJump?'background:#2a2a5e;border-color:#4cff91;color:#4cff91':'border-color:#333;color:#555'}">
+        ${S.autoJump?'✓':'✗'} 自动跳下一题
+      </button>
       <button class="mode-tab" data-action="switchToWrongReview"
         style="border-color:#ff6b6b;color:#ff9d6b;${getWrongCount()>0?'background:#2a1a1a':''}">
         错题复习 ${getWrongCount()>0?'('+getWrongCount()+')':''}
@@ -785,6 +802,10 @@ function renderWrongReview() {
     </div>
 
     <div style="text-align:center;margin-bottom:12px">
+      <button class="mode-tab ${S.autoJump?'active':''}" data-action="toggleAutoJump"
+        style="${S.autoJump?'background:#2a2a3a;border-color:#4cff91;color:#4cff91':'border-color:#333;color:#555'};border-radius:8px;padding:6px 16px;cursor:pointer">
+        ${S.autoJump?'✓':'✗'} 自动跳下一题
+      </button>
       <button class="mode-tab" data-action="exitWrongReview"
         style="background:#2a2a3a;border-color:#ff6b6b;color:#ff9d6b;border-radius:8px;padding:6px 16px;cursor:pointer">
         ← 退出错题复习
