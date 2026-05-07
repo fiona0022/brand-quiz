@@ -692,7 +692,7 @@ function render() {
   const qLabel = S.mode === 'group' ? '这个品牌属于哪个集团？' : '这个品牌属于哪个品类？';
   // [cn, enBrand, groupDisplay, groupInternal, typ]
   const [cn, enBrand, groupDisplay, groupInternal, typ] = S.current;
-  const brandEnHint = enBrand ? `（${enBrand}）` : '';
+  const displayName = enBrand || cn;
 
   const optionsHtml = S.currentOptions.map(opt =>
     `<button class="option-btn" data-action="answer" data-answer="${esc(opt)}">${opt}</button>`
@@ -756,8 +756,7 @@ function render() {
 
     <div class="card" id="qcard">
       <div class="question-label">${S.doneCount} / ${S.totalCount}</div>
-      <div class="brand-name">${cn}</div>
-      <div class="brand-cn">${brandEnHint}</div>
+      <div class="brand-name">${displayName}</div>
       <div class="answer-hint">${qLabel}</div>
       <div class="options-grid ${S.mode==='type'?'cols-1':''}">
         ${optionsHtml}
@@ -783,7 +782,7 @@ function renderWrongReview() {
   const pct = totalWrongs > 0 ? Math.round((done / totalWrongs) * 100) : 0;
   // [cn, enBrand, groupDisplay, groupInternal, typ]
   const [cn, enBrand, groupDisplay, groupInternal, typ] = S.current;
-  const brandEnHint = enBrand ? `（${enBrand}）` : '';
+  const displayName = enBrand || cn;
   const qLabel = S.mode === 'group' ? '这个品牌属于哪个集团？' : '这个品牌属于哪个品类？';
 
   const optionsHtml = S.currentOptions.map(opt =>
@@ -820,8 +819,7 @@ function renderWrongReview() {
 
     <div class="card" id="qcard">
       <div class="question-label">错题复习 ${done} / ${totalWrongs}</div>
-      <div class="brand-name">${cn}</div>
-      <div class="brand-cn">${brandEnHint}</div>
+      <div class="brand-name">${displayName}</div>
       <div class="answer-hint">${qLabel}</div>
       <div class="options-grid ${S.mode==='type'?'cols-1':''}">
         ${optionsHtml}

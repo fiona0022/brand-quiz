@@ -301,6 +301,7 @@ const BRANDS = [
   ["Giovanni Valentino 卓凡尼华伦天奴", "Giovanni Valentino", "Valentino 华伦天奴", "Valentino 华伦天奴集团", "f"],
   ["Valentino 华伦天奴", "Valentino", "Valentino 华伦天奴", "Valentino 华伦天奴集团", "f"],
   ["Sephora丝芙兰", "Sephora", "LVMH 路威酩轩", "LVMH路威酩轩集团", "o"],
+  ["Rimowa日默瓦", "Rimowa", "LVMH 路威酩轩", "LVMH路威酩轩集团", "f"],
 ];
 
 // 统计
